@@ -4,7 +4,7 @@ from tensorflow.keras import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 
 # Load dataset
-data = pd.read_csv("daidalos.csv", header=None)
+data = pd.read_csv("project.csv", header=None)
 X = data.iloc[:, :-1]  # Features (keypoints)
 y = data.iloc[:, -1]   # Labels (1 for FALL, 0 for NOT FALL)
 
@@ -32,6 +32,8 @@ loss, accuracy = model.evaluate(X_test, y_test)
 print(f"Test Accuracy: {accuracy * 100:.2f}%")
 
 # Save the trained model
-model.save("daidalos.h5")
+model.save("lstm_v1.h5")
+
+
 
 

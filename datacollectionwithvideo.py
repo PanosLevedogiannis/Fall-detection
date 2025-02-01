@@ -3,8 +3,9 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_hub as hub
 import csv
+import os
 
-# Load the MoveNet model
+# Load MoveNet Model (Load Once to Improve Performance)
 def load_movenet_model():
     model_url = "https://tfhub.dev/google/movenet/singlepose/lightning/4"
     print("Loading MoveNet model...")
@@ -24,6 +25,7 @@ def save_to_csv(filename, keypoints, velocities, label):
     row = [coord for point in keypoints for coord in point[:2]]  # Flatten [x, y]
     row.extend(velocities)  # Add velocity features
     row.append(label)  # Append the label (1 for FALL, 0 for NO FALL)
+    
     if len(row) == 52:  # Ensure 17 keypoints (x, y) + 17 velocities + 1 label
         with open(filename, mode='a', newline='') as file:
             writer = csv.writer(file)
@@ -35,20 +37,24 @@ def save_to_csv(filename, keypoints, velocities, label):
 def calculate_velocity(current_keypoints, previous_keypoints, time_interval):
     velocities = []
     for curr, prev in zip(current_keypoints, previous_keypoints):
-        if curr[2] > 0.5 and prev[2] > 0.5:  # Confidence threshold for both keypoints
+        if curr[2] > 0.5 and prev[2] > 0.5:  # Confidence threshold for keypoints
             velocity = np.sqrt((curr[0] - prev[0])**2 + (curr[1] - prev[1])**2) / time_interval
             velocities.append(velocity)
         else:
-            velocities.append(0.0)  # No reliable velocity if confidence is low
+            velocities.append(0.0)  # Default velocity if confidence is low
     return velocities
 
-# Process video and extract keypoints with velocities
-def process_video(video_path, label, output_csv, input_size=192):
-    model = load_movenet_model()
+# Process a video and extract keypoints with velocities
+def process_video(video_path, label, output_csv, model, input_size=192):
+    # Check if the video exists
+    if not os.path.exists(video_path):
+        print(f"Error: Video file '{video_path}' not found. Skipping...")
+        return
+
     cap = cv2.VideoCapture(video_path)
 
     if not cap.isOpened():
-        print(f"Error: Could not open video {video_path}.")
+        print(f"Error: Could not open video '{video_path}'. Skipping...")
         return
 
     previous_keypoints = None
@@ -61,7 +67,7 @@ def process_video(video_path, label, output_csv, input_size=192):
     while True:
         ret, frame = cap.read()
         if not ret:
-            break
+            break  # End of video
 
         # Preprocess the frame
         input_image = preprocess_image(frame, input_size)
@@ -88,81 +94,26 @@ def process_video(video_path, label, output_csv, input_size=192):
 
 # Main function
 if __name__ == "__main__":
-    # Define video paths and labels
+    # Define paths for 5 FALL and 5 NO FALL videos
     videos = [
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-01-cam0.mp4", "label": 1},  # 1 for FALL
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-02-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-03-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-04-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-05-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-06-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-07-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-08-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-09-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-10-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-11-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-12-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-13-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-14-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-15-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-16-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-17-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-18-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-19-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-20-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-21-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-22-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-23-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-24-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-25-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-26-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-27-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-28-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-29-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_falling_files/fall-30-cam0.mp4", "label": 1},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-01-cam0.mp4", "label": 0},  # 0 for NO FALL
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-02-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-03-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-04-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-05-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-06-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-07-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-08-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-09-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-10-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-11-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-12-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-13-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-14-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-15-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-16-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-17-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-18-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-19-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-20-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-21-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-22-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-23-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-24-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-25-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-26-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-27-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-28-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-29-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-30-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-31-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-32-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-33-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-34-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-35-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-36-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-37-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-38-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-39-cam0.mp4", "label": 0},
-        {"path": "/Users/panoslevedogiannis/Documents/fall-detection-code/daidalos_ADL_files/adl-40-cam0.mp4", "label": 0},
-        
-    ]
-    output_csv = "daidalos.csv"
+        {"path": "falls/fall_1.mp4", "label": 1},  # FALL
+        {"path": "falls/fall_2.mp4", "label": 1},
+        {"path": "falls/fall_3.mp4", "label": 1},
+        {"path": "falls/fall_4.mp4", "label": 1},
+        {"path": "falls/fall_5.mp4", "label": 1},
 
+        {"path": "no_falls/no_fall_1.mp4", "label": 0},  # NO FALL
+        {"path": "no_falls/no_fall_2.mp4", "label": 0},
+        {"path": "no_falls/no_fall_3.mp4", "label": 0},
+        {"path": "no_falls/no_fall_4.mp4", "label": 0},
+        {"path": "no_falls/no_fall_5.mp4", "label": 0},
+    ]
+
+    output_csv = "lstm1_v1.csv"  # Output CSV file
+
+    # Load MoveNet once to avoid reloading it for each video
+    movenet_model = load_movenet_model()
+
+    # Process each video
     for video in videos:
-        process_video(video["path"], video["label"], output_csv)
+        process_video(video["path"], video["label"], output_csv, movenet_model)
